@@ -1,0 +1,177 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-rm: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+# Assume the input [--force] [--cached] [file]+
+
+if [ $# -eq 0 ]
+then
+    echo "usage: girt-rm [--force] [--cached] <filenames>"
+    exit 1
+elif test ! -d ".girt"
+then
+    echo "girt-rm: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+# Initialise to 0
+FORCED=0
+CACHED=0
+
+# Checking if the given files are valid to remove
+for FILE in $@
+do
+    # Check argument inputs for keywords --force and --cached
+    if [ $FILE = '--force' ]
+    then
+        FORCED=1
+        # Iterate the for loop so we don't consider this input as a file
+        continue
+    elif [ $FILE = '--cached' ]
+    then
+        CACHED=1
+        # Iterate the for loop so we don't consider this input as a file
+        continue
+    fi
+
+    # Now, the logic we have to consider is to first check the:
+    # index file, the recent commit file, and the working directory
+
+    # For later use, we need to obtain the recent commit file
+    RECENTCOMMIT=$(cat .girt/repositories/master/COMMIT_EDITMSG | wc -l) 2>/dev/null
+    RECENTCOMMIT=$((RECENTCOMMIT - 1))
+
+    # Delete file in working directory and index
+    if [ $CACHED -eq 0 ]
+    then
+        # Force delete file in working directory and index
+        if [ $FORCED -eq 1 ]
+        then
+            # If file is in working directory but not in index
+            if test -f "$FILE" && test ! -f ".girt/index/$FILE"
+            then
+                echo "girt-rm: error: '$FILE' is not in the girt repository"
+                exit 1
+            fi
+            continue
+        fi
+        
+        # If recent commit does not contain the file
+        if test ! -f ".girt/repositories/master/$RECENTCOMMIT/$FILE" 
+        then
+            # Then check the index for the file
+            if test -f ".girt/index/$FILE"
+            then
+                # Not commited yet error message
+                echo "girt-rm: error: '$FILE' has staged changes in the index"
+                exit 1
+            else
+                # Not found in index error message
+                echo "girt-rm: error: '$FILE' is not in the girt repository"
+                exit 1
+            fi
+        fi
+
+        # COMPARISON OF FILES BELOW
+        # (Initialsing variables to 1)
+        COMPARE1=1  # Comparing files in working directory and index
+        COMPARE2=1  # Comparing files in working directory and recent commit
+        COMPARE3=1  # Comparing files in index and recent commit
+        
+        COMPARE1=$(diff "$FILE" ".girt/index/$FILE" | wc -l) 2>/dev/null
+        COMPARE2=$(diff "$FILE" .girt/repositories/master/$RECENTCOMMIT/$FILE | wc -l) 2>/dev/null
+        COMPARE3=$(diff ".girt/index/$FILE" ".girt/repositories/master/$RECENTCOMMIT/$FILE" | wc -l) 2>/dev/null
+
+        # If FORCED option was not given, go through safety checks
+        if [ $FORCED -eq 0 ]
+        then
+            # If the file in the working directory is different to the recent commit's
+            # AND
+            # If the file in the index is the same as the recent commit's
+            if [ $COMPARE2 -ne 0 ] && [ $COMPARE3 -eq 0 ]
+            then
+                echo "girt-rm: error: '$FILE' in the repository is different to the working file"
+                exit 1
+            fi
+        fi
+
+        # If the file in the working directory is different to the index's
+        # AND
+        # If the file in the working directory is different to the recent commit's
+        if [ $COMPARE1 -ne 0 ] && [ $COMPARE2 -ne 0 ]
+        then
+            echo "girt-rm: error: '$FILE' in index is different to both to the working file and the repository"
+            exit 1
+
+        # If the file in the index is the same as the recent commit's
+        elif [ $COMPARE3 -ne 0 ]
+        then
+            echo "girt-rm: error: '$FILE' has staged changes in the index"
+            exit 1
+        fi
+    else
+
+        # COMPARISON OF FILES BELOW
+        # (Initialsing variables to 1)
+        COMPARE1=1  # Comparing files in working directory and index
+        COMPARE2=1  # Comparing files in working directory and recent commit
+        COMPARE3=1  # Comparing files in index and recent commit
+        
+        COMPARE1=$(diff "$FILE" ".girt/index/$FILE" | wc -l) 2>/dev/null
+        COMPARE2=$(diff "$FILE" .girt/repositories/master/$RECENTCOMMIT/$FILE | wc -l) 2>/dev/null
+        COMPARE3=$(diff ".girt/index/$FILE" ".girt/repositories/master/$RECENTCOMMIT/$FILE" | wc -l) 2>/dev/null
+
+        # Proceed to override the safety checks and delete files
+        if [ $FORCED -eq 1 ]
+        then
+            continue
+        fi
+
+        # If the file exists in working directory
+        # AND
+        # If the file does not exists in index
+        # AND
+        # If the file does not exist in the recent commit
+        if test -f $FILE && test ! -f ".girt/index/$FILE"  && test ! -f ".girt/repositories/master/$RECENTCOMMIT/$FILE"
+        then
+            echo "girt-rm: error: '$FILE' is not in the girt repository"
+            exit 1
+
+        # If the file in the working directory is different to the index's
+        # AND
+        # If the file in the index is different to the recent commit's
+        elif [ $COMPARE1 -ne 0 ] && [ $COMPARE3 -ne 0 ]
+        then
+            echo "girt-rm: error: '$FILE' in index is different to both to the working file and the repository"
+            exit 1
+        fi
+    fi
+done
+
+# Now that we have gone through the safety checks and there are no errors, ready for file deletion
+for FILE in $@
+do
+    # Iterate the loop for files that contain --forced or --cached
+    if [ $FILE = "--cached" ]
+    then
+        continue
+    elif [ $FILE = "--force" ]
+    then
+        continue
+    fi
+
+    # Remove file in index
+    rm ".girt/index/$FILE"
+    
+    # If --cached option was not given, delete the file in working directory as well
+    if [ $CACHED -eq 1 ]
+    then
+        continue
+    else
+        rm $FILE
+    fi
+done

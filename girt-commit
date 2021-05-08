@@ -1,0 +1,103 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-commit: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+if test $1 = '-m' &&  [ $# -eq 2 ]
+then
+    # Message cannot be empty or only white spaces
+    case $2 in
+    (*[![:blank:]]*) continue;;
+    (*) echo "usage: girt-commit [-a] -m commit-message"
+        exit 1;;
+    esac
+elif test $1 = '-a' && test $2 = '-m' && [ $# -eq 3 ]
+then
+    # Message cannot be empty or only white spaces
+    case $3 in
+    (*[![:blank:]]*) continue;;
+    (*) echo "usage: girt-commit [-a] -m commit-message"
+        exit 1;;
+    esac
+
+    # For each file in index
+    for FILE in .girt/index*/*
+    do
+        # Compare this file to the one in the current directory
+        if test -f $(basename $FILE) 2>/dev/null
+        then
+            # If file exists, check for differences
+            DIFF=$(diff $(basename $FILE) $FILE | wc -l)
+            # If files are not the same
+            if [ $DIFF -ne 0 ]
+            then
+                cp "$(basename $FILE)" "$FILE"
+                # This is the message when using -a option
+                COMMITMESSAGE=$3
+            fi
+        fi
+    done
+else
+    echo "usage: girt-commit [-a] -m commit-message"
+    exit 1
+fi
+
+# There is nothing to commit if the index directory is the same as recent commit
+CURRENTBRANCH=$(cat ".girt/CURRENTBRANCH_EDITMSG")
+RECENTCOMMIT=$(ls .girt/repositories/$CURRENTBRANCH | wc -l)
+RECENTCOMMIT=$((RECENTCOMMIT - 2))
+
+if [ $RECENTCOMMIT -lt 0 ]
+then
+    RECENTCOMMIT=-1
+else
+    # Check for differences
+    DIFF=$(diff .girt/repositories/$CURRENTBRANCH/$RECENTCOMMIT .girt/index | wc -l)
+    if [ $DIFF -eq 0 ]
+    then
+        echo "nothing to commit"
+        exit 0
+    fi
+fi
+
+# Since there are differences (or this is the first commit):
+# Add new file/s from index to the new commit
+if test ! -f ".girt/RECENTCOMMITBRANCH_EDITMSG"
+then
+    echo "master" > ".girt/RECENTCOMMITBRANCH_EDITMSG"
+fi
+
+RECENTBRANCH=$(cat .girt/RECENTCOMMITBRANCH_EDITMSG)
+CURRENTCOMMIT=$(ls -l .girt/repositories/$RECENTBRANCH | grep ^d | grep [0-9]$ | rev | cut -d' ' -f1 | tail -1)
+if test -z "$CURRENTCOMMIT"
+then
+    NEXTCOMMIT=0
+else
+    NEXTCOMMIT=$((CURRENTCOMMIT+1))
+fi
+
+mkdir ".girt/repositories/$CURRENTBRANCH/$NEXTCOMMIT"
+echo "$CURRENTBRANCH" > ".girt/RECENTCOMMITBRANCH_EDITMSG"
+
+for FILE in .girt/index*/*
+do
+    if test -f $FILE
+    then
+        cp "$FILE" ".girt/repositories/$CURRENTBRANCH/$NEXTCOMMIT"
+    fi
+done
+
+echo "Committed as commit $NEXTCOMMIT"
+
+if test -z $COMMITMESSAGE 2>/dev/null
+then
+    # This is the message without the -a option
+    COMMITMESSAGE=$2
+fi
+
+echo "$NEXTCOMMIT $COMMITMESSAGE" >> .girt/repositories/$CURRENTBRANCH/COMMIT_EDITMSG
+
+exit 0

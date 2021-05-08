@@ -1,0 +1,127 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-checkout: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+# Number of arguments must be 1
+if [ $# -ne 1 ]
+then
+    echo "usage: girt-checkout <branch>"
+    exit 1
+else
+    CURRENTBRANCH=$(cat ".girt/CURRENTBRANCH_EDITMSG") 2>/dev/null
+    NEWBRANCH=$1
+    # Check if the branch exists in the repository
+    if test -d ".girt/repositories/$NEWBRANCH"
+    then
+        # Check if this branch is already the current branch
+        if [ "$CURRENTBRANCH" = "$NEWBRANCH" ]
+        then
+            echo "Already on '$NEWBRANCH'"
+            exit 1
+        else
+            COMPARE=$(diff ".girt/repositories/$CURRENTBRANCH" ".girt/repositories/$NEWBRANCH" | wc -l)
+            if [ $COMPARE -eq 1 ]
+            then
+                echo "$NEWBRANCH" > ".girt/CURRENTBRANCH_EDITMSG"
+                echo "Switched to branch '$NEWBRANCH'"
+                exit 0
+            fi
+
+            # Before removing/copying files from the working directory check for files that would be overwritten by this command
+            # Retrieve the recent commit of the current branch and given branch in argument:
+            RECENTCOMMITCURRENT=$(cat ".girt/repositories/$CURRENTBRANCH/COMMIT_EDITMSG" | tail -1 | cut -d' ' -f1) 2>/dev/null
+            RECENTCOMMITNEW=$(cat ".girt/repositories/$NEWBRANCH/COMMIT_EDITMSG" | tail -1 | cut -d' ' -f1) 2>/dev/null
+            
+            # Create new modified file list if it already exists
+            if test -f ".girt/MODIFIEDFILES_EDITMSG"
+            then
+                rm ".girt/MODIFIEDFILES_EDITMSG"
+            fi
+
+            # Compare files in working directory with files in recent commit of current branch
+            # Initialise ERROR variable to 0
+            ERROR=0
+            for FILE in *
+            do
+                if test -f ".girt/repositories/$CURRENTBRANCH/$RECENTCOMMITCURRENT/$FILE"
+                then
+                    # If any changes have been made to the files in the working directory, produce ERROR
+                    TEST=$(diff "$FILE" ".girt/repositories/$CURRENTBRANCH/$RECENTCOMMITCURRENT/$FILE" | wc -l) 2>/dev/null
+                    if [ $TEST -ne 0 ]
+                    then
+                        echo "$FILE" >> ".girt/MODIFIEDFILES_EDITMSG"
+                        ERROR=1
+                    fi
+                
+                # If the file is not in the current branch's recent commit, leave it in the working directory
+                else
+                    continue
+                fi
+            done
+
+            # If files have been modified without being commited, produce error message with these files
+            if [ $ERROR -eq 1 ]
+            then
+                echo "girt-checkout: error: Your changes to the following files would be overwritten by checkout:"
+                cat ".girt/MODIFIEDFILES_EDITMSG"
+                exit 1
+            fi
+
+            # Retrieve the recent commit of the current branch
+            RECENTCOMMITCURRENT=$(cat ".girt/repositories/$CURRENTBRANCH/COMMIT_EDITMSG" | tail -1 | cut -d' ' -f1) 2>/dev/null
+
+            # Also retrieve the recent commit of the given branch in argument
+            RECENTCOMMITNEW=$(cat ".girt/repositories/$NEWBRANCH/COMMIT_EDITMSG" | tail -1 | cut -d' ' -f1) 2>/dev/null
+
+            # Check if the recent commits are the same
+            DIFF=$(diff ".girt/repositories/$CURRENTBRANCH/$RECENTCOMMITCURRENT" ".girt/repositories/$NEWBRANCH/$RECENTCOMMITNEW" | wc -l)
+            
+            # Delete all files in working directory that correspond with the files in the current branch's recent commit
+            if [ $DIFF -ne 0 ]
+            then
+                for FILE in *
+                do
+                    if test -f ".girt/repositories/$CURRENTBRANCH/$RECENTCOMMITCURRENT/$FILE"
+                    then
+                        # If the files have the same name but are different, DO NOT REMOVE
+                        FILEDIFF=$(diff "$FILE" ".girt/repositories/$CURRENTBRANCH/$RECENTCOMMITCURRENT/$FILE" | wc -l)
+                        if [ $FILEDIFF -ne 0 ]
+                        then
+                            continue
+                        else
+                            rm "$FILE"
+                            rm ".girt/index/$FILE"
+                        fi
+                    fi
+                done
+            fi
+            
+            # Consider each file in the new branch's recent commit
+            NEWFILES=$(ls .girt/repositories/$NEWBRANCH/$RECENTCOMMITNEW)
+
+            # We will now copy these files over to the working directory
+            for FILE in $NEWFILES
+            do
+                # If the file already exists here, it means that this is a 'modified' file so we will not copy the file over
+                if test -f "$FILE"
+                then
+                    continue
+                else
+                    cp ".girt/repositories/$NEWBRANCH/$RECENTCOMMITNEW/$FILE" "$FILE"
+                    cp ".girt/repositories/$NEWBRANCH/$RECENTCOMMITNEW/$FILE" ".girt/index/$FILE"
+                fi
+            done
+
+            echo "$NEWBRANCH" > ".girt/CURRENTBRANCH_EDITMSG"
+            echo "Switched to branch '$NEWBRANCH'"
+            exit 0
+        fi
+    else
+        echo "girt-checkout: error: unknown branch '$NEWBRANCH'"
+        exit 1
+    fi
+fi

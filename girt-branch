@@ -1,0 +1,101 @@
+#!/bin/dash
+
+# Now, girt-branch either creates a branch, deletes a branch, or lists current branch names:
+
+if test ! -d ".girt"
+then
+    echo "girt-branch: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+# Base case, cannot have more than 2 arguments
+if [ $# -gt 2 ]
+then
+    echo "usage: girt-branch [-d] <branch>"
+    exit 1
+fi
+
+# List current branch names in the repository
+if [ $# -eq 0 ]
+then
+    # If there are no commits yet, produce error message
+    CURRENTBRANCH=$(cat .girt/CURRENTBRANCH_EDITMSG)
+    COMMITS=$(ls .girt/repositories/$CURRENTBRANCH | wc -l)
+    COMMITS=$((COMMITS - 1))
+    if [ $COMMITS -lt 1 ]
+    then
+        echo "girt-branch: error: this command can not be run until after the first commit"
+        exit 1
+    
+    # List branches here
+    else
+        ls -ld .girt/repositories/*/ | rev | cut -d'/' -f2 | rev
+        exit 0
+    fi
+fi
+
+# Create the given branch
+if test $1 != '-d' && [ $# -eq 1 ]
+then
+    # Check if branch already exists
+    BRANCHNAME=$1
+    if test -d ".girt/repositories/$BRANCHNAME"
+    then
+        echo "girt-branch: error: branch '$BRANCHNAME' already exists"
+        exit 1
+    
+    # Add the given branch to the repository and copy branch with most recent commit made???
+    else
+        CURRENTBRANCH=$(cat .girt/CURRENTBRANCH_EDITMSG)
+        cp -R ".girt/repositories/$CURRENTBRANCH" ".girt/repositories/$BRANCHNAME"
+        exit 0
+    fi
+fi
+
+# # Delete the given branch
+if test $1 = '-d' && [ $# -eq 2 ]
+then
+    BRANCHNAME=$2
+    # Cannot delete the master branch
+    if test $BRANCHNAME = 'master'
+    then
+        echo "girt-branch: error: can not delete branch 'master'"
+        exit 1
+    fi
+
+    # The branch name should not begin with a dash
+    DASHCHECK=$(echo "$BRANCHNAME" | egrep ^- | wc -l)
+    if [ $DASHCHECK -eq 1 ]
+    then
+        echo "usage: girt-branch [-d] <branch>"
+        exit 1
+    fi
+
+    # If branch name is valid, check removal validity
+    if test -d ".girt/repositories/$BRANCHNAME"
+    then
+        CURRENTBRANCH=$(cat .girt/CURRENTBRANCH_EDITMSG)
+        # Cannot delete the current branch
+        if [ $BRANCHNAME = "$CURRENTBRANCH" ]
+        then
+            echo "girt-branch: error: can not delete branch '$BRANCHNAME'"
+            exit 1
+        else
+            # Delete the branch if it is not the current branch
+            rm -r ".girt/repositories/$BRANCHNAME"
+            echo "Deleted branch '$BRANCHNAME'"
+            exit 0
+        fi
+    
+    # If branch is not found in the repository
+    else
+        echo "girt-branch: error: branch '$BRANCHNAME' doesn't exist"
+        exit 1
+    fi
+
+# If only the -d option was given without any additional file input
+elif test $1 = '-d' && [ $# -eq 1 ]
+then
+    echo "girt-branch: error: branch name required"
+    exit 1
+fi

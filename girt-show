@@ -1,0 +1,57 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-show: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+if [ $# -ne 1 ]
+then
+    echo "usage: girt-show <commit>:<filename>"
+    exit 1
+fi
+
+INPUT=$1
+COMMIT=$(echo $INPUT | cut -d':' -f1)
+FILENAME=$(echo $INPUT | sed 's/:/^/' | cut -d'^' -f2)
+
+# Checking if COMMIT value is empty
+if test -z $COMMIT
+then
+    # If COMMIT is not given, search the FILENAME in the index repository
+    if test -f ".girt/index/$FILENAME"
+    then
+        # Found the FILENAME in index so print the contents of file
+        cat ".girt/index/$FILENAME"
+        exit 0
+    else
+        echo "girt-show: error: '$FILENAME' not found in index"
+        exit 1
+    fi
+else
+    # Okay so now that we have a COMMIT value, check if it is valid
+    if [ $COMMIT -ne $COMMIT ] 2>/dev/null
+    then
+        echo "girt-show: error: unknown commit '$COMMIT'"
+        exit 1
+    fi
+
+    # If valid, does the COMMIT exist in the repositories?
+    if test ! -d ".girt/repositories/master/$COMMIT"
+    then
+        echo "girt-show: error: unknown commit '$COMMIT'"
+        exit 1
+    fi
+
+    # So if the COMMIT exists, does the FILENAME exist inside?
+    if test ! -f ".girt/repositories/master/$COMMIT/$FILENAME"
+    then
+        echo "girt-show: error: '$FILENAME' not found in commit $COMMIT"
+        exit 1
+    else
+        # Found the FILENAME in COMMIT so print the contents of file
+        cat ".girt/repositories/master/$COMMIT/$FILENAME"
+        exit 0
+    fi
+fi

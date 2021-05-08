@@ -1,0 +1,23 @@
+#!/bin/dash
+
+# First test if .girt already exists in folder
+if test -d ".girt"
+then
+    echo "girt-init: error: .girt already exists"
+    exit 1
+else
+    # Otherwise initialise the following directories
+    mkdir ".girt"
+    mkdir ".girt/index"
+
+    # As of now, the master branch is the current branch
+    echo "master" >> ".girt/CURRENTBRANCH_EDITMSG"
+
+    mkdir ".girt/repositories"
+    mkdir ".girt/repositories/master"
+
+    echo "Initialized empty girt repository in .girt"
+    exit 0
+fi
+
+# ADD MORE

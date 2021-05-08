@@ -1,0 +1,11 @@
+#!/bin/dash
+
+if ! test -d ".girt"
+then
+    echo "girt-log: error: girt repository directory .girt not found"
+    exit 1
+else
+    tac .girt/repositories/master/COMMIT_EDITMSG
+fi
+
+exit 0

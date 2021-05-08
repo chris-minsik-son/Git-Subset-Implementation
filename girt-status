@@ -1,0 +1,146 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-status: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+FILES=$(find . -type f | rev | cut -d'/' -f1 | rev | sort | uniq)
+for FILE in $FILES
+do
+    # Untracked files are files not seen in the previous commit
+    # This includes all the girt files in the working directory
+    case "$FILE" in
+    "girt-add") echo "$FILE - untracked"
+        continue;;
+    "girt-commit") echo "$FILE - untracked"
+        continue;;
+    "girt-init") echo "$FILE - untracked"
+        continue;;
+    "girt-log") echo "$FILE - untracked"
+        continue;;
+    "girt-rm") echo "$FILE - untracked"
+        continue;;
+    "girt-show") echo "$FILE - untracked"
+        continue;;
+    "girt-status") echo "$FILE - untracked"
+        continue;;
+    "girt-branch") echo "$FILE - untracked"
+        continue;;
+    "girt-checkout") echo "$FILE - untracked"
+    continue;;
+    "girt-merge") echo "$FILE - untracked"
+    continue;;
+    "COMMIT_EDITMSG")
+        continue;;
+    "CURRENTBRANCH_EDITMSG")
+        continue;;
+    "RECENTCOMMITBRANCH_EDITMSG")
+        continue;;
+    "MODIFIEDFILES_EDITMSG")
+        continue;;
+    *) :
+    esac
+
+    # Retrieve the most recent commit value of current branch, -1 if none
+    CURRENTBRANCH=$(cat ".girt/CURRENTBRANCH_EDITMSG")
+    RECENTCOMMIT=$(cat .girt/repositories/$CURRENTBRANCH/COMMIT_EDITMSG | wc -l) 2>/dev/null
+    RECENTCOMMIT=$((RECENTCOMMIT - 1))
+    RECENTCOMMITFILE=".girt/repositories/$CURRENTBRANCH/$RECENTCOMMIT/$FILE" 2>/dev/null
+
+    # If file is in working directory but not in index
+    if test -f "$FILE" && test ! -f ".girt/index/$FILE"
+    then
+        echo "$FILE - untracked"
+        continue
+    fi
+    
+    # Now we have to be careful in the case where the file could
+    # exist in the working directory, index and recent commit
+    if test -f "$FILE" && test -f ".girt/index/$FILE" && test -f "$RECENTCOMMITFILE"
+    then
+        # Compare the contexts of files with the same name:
+        # Comparing working directory file and index file
+        COMPARE1=$(diff "$FILE" ".girt/index/$FILE" | wc -l) 2>/dev/null
+        # Comparing index file and recent commit file
+        COMPARE2=$(diff ".girt/index/$FILE" "$RECENTCOMMITFILE" | wc -l) 2>/dev/null
+
+        # Check for any differences in file contents between
+        # working directory file and index file:
+
+        # If working directory file and index file are different
+        if [ $COMPARE1 -ne 0 ]
+        then
+            # Now, if index file and recent commit file are different
+            if [ $COMPARE2 -ne 0 ]
+            then
+                echo "$FILE - file changed, different changes staged for commit"
+                continue
+            fi
+            
+            # Now, if index file and recent commit file are the same
+            if [ $COMPARE2 -eq 0 ]
+            then
+                echo "$FILE - file changed, changes not staged for commit"
+                continue
+            fi
+        fi
+
+        # If index file and recent commit file are not the same
+        if [ $COMPARE2 -ne 0 ]
+        then
+            echo "$FILE - file changed, changes staged for commit"
+            continue
+
+        # If index file and recent commit file are the same
+        elif [ $COMPARE2 -eq 0 ]
+        then
+            echo "$FILE - same as repo"
+            continue
+        fi
+    fi
+    
+    # Check if the file has been added to the index
+    if test -f "$FILE" && test -f ".girt/index/$FILE"
+    then
+        # Recent commit should not contain this file
+        if test ! -f "$RECENTCOMMITFILE"
+        then
+            # If file has been added to index, are they still the same?
+            COMPARE=$(diff "$FILE" ".girt/index/$FILE" | wc -l) 2>/dev/null
+            if [ $COMPARE -ne 0 ]
+            then
+                echo "$FILE - added to index, file changed"
+                continue
+            else
+                echo "$FILE - added to index"
+                continue
+            fi
+        fi
+
+    # If the file has been added to the index but deleted from working directory
+    elif test ! -f "$FILE" && test -f ".girt/index/$FILE" && test ! -f "$RECENTCOMMITFILE"
+    then
+        echo "$FILE - added to index, file deleted"
+        continue
+    fi
+
+    # Check if the file has been deleted (i.e. only exists in recent commit)
+    if test ! -f "$FILE" && test ! -f ".girt/index/$FILE"
+    then
+        if test ! -f "$RECENTCOMMITFILE"
+        then
+            continue
+        else
+            echo "$FILE - deleted"
+            continue
+        fi
+
+    # But if file has been deleted from working directory (i.e. exists in index)
+    elif test ! -f "$FILE"
+    then
+        echo "$FILE - file deleted"
+        continue
+    fi
+done

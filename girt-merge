@@ -1,0 +1,51 @@
+#!/bin/dash
+
+if test ! -d ".girt"
+then
+    echo "girt-merge: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+if test ! -f ".girt/RECENTCOMMITBRANCH_EDITMSG"
+then
+    echo "girt-merge: error: this command can not be run until after the first commit"
+    exit 1
+fi
+
+if [ "$1" != "" ] && [ $# -ne 3 ]
+then
+    echo "girt-merge: error: empty commit message"
+    exit 1
+fi
+
+if test $2 = '-m' && [ $# -eq 3 ]
+then
+    GIVENBRANCH=$1
+    if test ! -d ".girt/repositories/$GIVENBRANCH"
+    then
+        echo "girt-merge: error: unknown branch '$GIVENBRANCH'"
+        exit 1
+    fi
+    
+else
+    echo "usage: girt-merge <branch|commit> -m message"
+    exit 1
+fi
+# Retrieve the current branch
+CURRENTBRANCH=$(cat ".girt/CURRENTBRANCH_EDITMSG") 2>/dev/null
+GIVENBRANCH=$1
+
+if test -d ".girt/repositories/$GIVENBRANCH"
+then
+    SAMEBRANCH=$(diff ".girt/repositories/$GIVENBRANCH" ".girt/repositories/$CURRENTBRANCH" | wc -l)
+    if [ $SAMEBRANCH -eq 1 ]
+    then
+        echo "Already up to date"
+        exit 0
+    else
+        ####
+    fi
+    cp -R ".girt/repositories/$GIVENBRANCH/." ".girt/repositories/$CURRENTBRANCH"
+    echo "Fast-forward: no commit created"
+    exit 0
+fi
